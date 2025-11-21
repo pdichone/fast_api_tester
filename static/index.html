@@ -579,7 +579,20 @@
                 // Start recording
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    mediaRecorder = new MediaRecorder(stream);
+
+                    // Detect supported audio format (for iOS Safari compatibility)
+                    let options = { mimeType: 'audio/webm' };
+                    if (!MediaRecorder.isTypeSupported('audio/webm')) {
+                        if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                            options = { mimeType: 'audio/mp4' };
+                        } else if (MediaRecorder.isTypeSupported('audio/wav')) {
+                            options = { mimeType: 'audio/wav' };
+                        } else {
+                            options = {}; // Let browser choose
+                        }
+                    }
+
+                    mediaRecorder = new MediaRecorder(stream, options);
                     audioChunks = [];
                     recordingSeconds = 0;
 
@@ -589,7 +602,8 @@
 
                     mediaRecorder.onstop = async () => {
                         clearInterval(recordingTimer);
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        const mimeType = mediaRecorder.mimeType || 'audio/webm';
+                        const audioBlob = new Blob(audioChunks, { type: mimeType });
                         await processAudio(audioBlob);
                         stream.getTracks().forEach(track => track.stop());
                     };
@@ -624,9 +638,19 @@
             document.getElementById('recordingStatus').textContent = 'Processing audio...';
 
             try {
+                // Determine file extension from MIME type
+                let fileExtension = 'webm';
+                if (audioBlob.type.includes('mp4')) {
+                    fileExtension = 'mp4';
+                } else if (audioBlob.type.includes('wav')) {
+                    fileExtension = 'wav';
+                } else if (audioBlob.type.includes('m4a')) {
+                    fileExtension = 'm4a';
+                }
+
                 // Transcribe audio
                 const formData = new FormData();
-                formData.append('file', audioBlob, 'recording.webm');
+                formData.append('file', audioBlob, `recording.${fileExtension}`);
 
                 const transcribeResponse = await fetch(`${API_BASE}/api/soap-notes/transcribe`, {
                     method: 'POST',
